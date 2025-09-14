@@ -1,0 +1,343 @@
+// Eyes Café Database Schema
+// This is your Prisma schema file
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Sessions synchronized from World Café
+model Session {
+  id            String   @id @default(cuid())
+  worldCafeId   String   @unique @map("world_cafe_id")
+  title         String
+  description   String?
+  tableCount    Int      @default(10) @map("table_count")
+  status        String   @default("active") // 'active', 'paused', 'closed', 'completed'
+  language      String   @default("en-US")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  lastSyncedAt  DateTime? @map("last_synced_at")
+  syncStatus    String   @default("pending") @map("sync_status") // 'pending', 'syncing', 'completed', 'error'
+
+  // Relationships
+  participants     Participant[]
+  aiAnalyses       AiAnalysis[]
+  speakerDynamics  SpeakerDynamics[]
+  biasDetections   BiasDetection[]
+  polarizationMetrics PolarizationMetrics[]
+  generatedReports GeneratedReport[]
+  customInsights   CustomInsight[]
+  predictions      Prediction[]
+  apiSyncLogs      ApiSyncLog[]
+
+  @@index([worldCafeId])
+  @@index([status])
+  @@index([syncStatus])
+  @@map("sessions")
+}
+
+// Enhanced participant tracking
+model Participant {
+  id                    String   @id @default(cuid())
+  sessionId             String   @map("session_id")
+  worldCafeParticipantId String? @map("world_cafe_participant_id")
+  name                  String
+  email                 String?
+  tableAssignments      Json?    @map("table_assignments") // Track table movements
+  speakingPatterns      Json?    @map("speaking_patterns") // Cached analysis results
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  // Relationships
+  session         Session           @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  speakerDynamics SpeakerDynamics[]
+  predictions     Prediction[]
+
+  @@index([sessionId])
+  @@index([worldCafeParticipantId])
+  @@map("participants")
+}
+
+// Comprehensive AI analysis storage
+model AiAnalysis {
+  id                    String   @id @default(cuid())
+  sessionId             String   @map("session_id")
+  analysisVersion       String   @default("1.0") @map("analysis_version")
+  analysisTimestamp     DateTime @default(now()) @map("analysis_timestamp")
+  processingTimeMs      Int?     @map("processing_time_ms")
+
+  // Core Analysis Results  
+  speakingTimeAnalysis  Json?    @map("speaking_time_analysis")
+  biasDetections        Json?    @map("bias_detections")
+  polarizationMetrics   Json?    @map("polarization_metrics")
+  conversationFlow      Json?    @map("conversation_flow")
+  sentimentJourney      Json?    @map("sentiment_journey")
+  predictiveInsights    Json?    @map("predictive_insights")
+
+  // Metadata
+  confidenceScores      Json?    @map("confidence_scores")
+  modelVersions         Json?    @map("model_versions")
+  dataQualityScore      Float?   @map("data_quality_score")
+  warnings              String[] @map("warnings")
+
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  // Relationships
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([analysisTimestamp])
+  @@map("ai_analyses")
+}
+
+// Speaker dynamics tracking
+model SpeakerDynamics {
+  id                String   @id @default(cuid())
+  sessionId         String   @map("session_id")
+  tableId           Int?     @map("table_id")
+  speakerIndex      Int      @map("speaker_index")
+  participantId     String?  @map("participant_id")
+
+  // Speaking Metrics
+  speakingTimeSeconds  Int      @map("speaking_time_seconds")
+  interruptionCount    Int      @default(0) @map("interruption_count")
+  wordsPerMinute       Float?   @map("words_per_minute")
+  turnCount            Int      @default(0) @map("turn_count")
+  averageTurnLength    Float?   @map("average_turn_length")
+  longestTurnSeconds   Float?   @map("longest_turn_seconds")
+
+  // Behavioral Metrics
+  sentimentAverage     Float?   @map("sentiment_average")
+  influenceScore       Float?   @map("influence_score")
+  engagementLevel      String?  @map("engagement_level") // 'low', 'medium', 'high'
+  dominanceIndex       Float?   @map("dominance_index")
+
+  createdAt            DateTime @default(now()) @map("created_at")
+
+  // Relationships
+  session     Session      @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  participant Participant? @relation(fields: [participantId], references: [id])
+
+  @@index([sessionId, tableId])
+  @@index([participantId])
+  @@map("speaker_dynamics")
+}
+
+// Bias detection results
+model BiasDetection {
+  id                String   @id @default(cuid())
+  sessionId         String   @map("session_id")
+  tableId           Int?     @map("table_id")
+
+  // Bias Information
+  biasType          String   @map("bias_type") // 'gender', 'cultural', 'topic', 'participation'
+  biasCategory      String?  @map("bias_category") // 'language', 'interruption', 'topic_exclusion'
+  evidenceText      String?  @map("evidence_text")
+  contextText       String?  @map("context_text")
+  severityScore     Float    @map("severity_score") // 0-1
+
+  // Location in conversation
+  timestampStart    Float?   @map("timestamp_start")
+  timestampEnd      Float?   @map("timestamp_end")
+  speakersInvolved  Int[]    @map("speakers_involved")
+
+  // Analysis metadata
+  detectionMethod   String?  @map("detection_method")
+  confidenceLevel   Float?   @map("confidence_level")
+
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  // Relationships
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, tableId])
+  @@index([biasType])
+  @@index([severityScore])
+  @@map("bias_detections")
+}
+
+// Polarization tracking
+model PolarizationMetrics {
+  id                      String   @id @default(cuid())
+  sessionId               String   @map("session_id")
+  tableId                 Int?     @map("table_id")
+  measurementTime         DateTime @default(now()) @map("measurement_time")
+
+  // Polarization Measurements
+  polarizationIndex       Float    @map("polarization_index") // 0-100
+  topicDivergence         Float?   @map("topic_divergence")
+  echoChamberDetected     Boolean  @default(false) @map("echo_chamber_detected")
+  bridgeBuilders          Int[]    @map("bridge_builders")
+  opposingGroups          Json?    @map("opposing_groups")
+
+  // Trend Analysis
+  trendDirection          String?  @map("trend_direction") // 'increasing', 'decreasing', 'stable'
+  trendVelocity           Float?   @map("trend_velocity")
+  interventionRecommended Boolean  @default(false) @map("intervention_recommended")
+
+  createdAt               DateTime @default(now()) @map("created_at")
+
+  // Relationships
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, tableId])
+  @@index([polarizationIndex])
+  @@index([measurementTime])
+  @@map("polarization_metrics")
+}
+
+// Report generation and storage
+model GeneratedReport {
+  id               String   @id @default(cuid())
+  sessionId        String   @map("session_id")
+
+  // Report Configuration
+  reportType       String   @map("report_type") // 'comprehensive', 'executive', 'facilitator', 'academic'
+  format           String   @map("format") // 'pdf', 'html', 'csv', 'json'
+  parameters       Json?    @map("parameters")
+
+  // File Information
+  filePath         String?  @map("file_path")
+  fileSizeBytes    Int?     @map("file_size_bytes")
+  generationTimeMs Int?     @map("generation_time_ms")
+
+  // Metadata
+  generatedBy      String?  @map("generated_by")
+  generatedAt      DateTime @default(now()) @map("generated_at")
+  expiresAt        DateTime? @map("expires_at")
+  downloadCount    Int      @default(0) @map("download_count")
+
+  // Relationships
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([reportType])
+  @@index([generatedAt])
+  @@map("generated_reports")
+}
+
+// Cross-session learning and patterns
+model SessionPattern {
+  id                      String   @id @default(cuid())
+  patternType             String   @map("pattern_type") // 'facilitator_style', 'group_dynamics', 'topic_evolution'
+  patternName             String   @map("pattern_name")
+  patternData             Json     @map("pattern_data")
+  supportingSessions      String[] @map("supporting_sessions")
+  confidenceLevel         Float    @map("confidence_level")
+  statisticalSignificance Float?   @map("statistical_significance")
+
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt @map("updated_at")
+
+  @@index([patternType])
+  @@index([confidenceLevel])
+  @@map("session_patterns")
+}
+
+// Predictive models and forecasts
+model Prediction {
+  id                  String   @id @default(cuid())
+  sessionId           String   @map("session_id")
+
+  // Prediction Details
+  predictionType      String   @map("prediction_type") // 'outcome', 'intervention', 'engagement', 'conflict'
+  predictionData      Json     @map("prediction_data")
+  confidenceScore     Float    @map("confidence_score")
+  predictionTimestamp DateTime @default(now()) @map("prediction_timestamp")
+
+  // Model Information
+  modelVersion        String?  @map("model_version")
+  inputFeatures       Json?    @map("input_features")
+
+  // Validation (filled later)
+  actualOutcome       Json?    @map("actual_outcome")
+  accuracyScore       Float?   @map("accuracy_score")
+  validatedAt         DateTime? @map("validated_at")
+
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  // Relationships
+  session     Session      @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  participant Participant? @relation(fields: [participantId], references: [id])
+  participantId String?    @map("participant_id")
+
+  @@index([sessionId])
+  @@index([predictionType])
+  @@index([confidenceScore])
+  @@map("predictions")
+}
+
+// Custom insights and annotations
+model CustomInsight {
+  id          String   @id @default(cuid())
+  sessionId   String   @map("session_id")
+
+  // Insight Details
+  insightType String   @map("insight_type")
+  title       String
+  description String
+  evidence    Json?    @map("evidence")
+  severity    String   @map("severity") // 'low', 'medium', 'high', 'critical'
+  actionItems String[] @map("action_items")
+
+  // Metadata
+  createdBy   String?  @map("created_by")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relationships
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([insightType])
+  @@index([severity])
+  @@map("custom_insights")
+}
+
+// World Café API integration tracking
+model ApiSyncLog {
+  id              String   @id @default(cuid())
+  endpoint        String
+  sessionId       String?  @map("session_id")
+  syncType        String   @map("sync_type") // 'session', 'transcription', 'participant'
+  syncStatus      String   @map("sync_status") // 'success', 'error', 'partial'
+  requestData     Json?    @map("request_data")
+  responseData    Json?    @map("response_data")
+  errorMessage    String?  @map("error_message")
+  syncDurationMs  Int?     @map("sync_duration_ms")
+
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  // Relationships
+  session Session? @relation(fields: [sessionId], references: [id])
+
+  @@index([sessionId])
+  @@index([syncStatus])
+  @@index([createdAt])
+  @@map("api_sync_logs")
+}
+
+// Document embeddings for RAG functionality
+model DocumentEmbedding {
+  id            String   @id @default(cuid())
+  sessionId     String   @map("session_id")
+  tableId       Int?     @map("table_id")
+  documentType  String   @map("document_type") // 'transcription', 'analysis', 'bias_detection'
+  content       String
+  embedding     Json     // Vector embedding stored as JSON
+  metadata      Json?    // Additional metadata about the document
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@index([sessionId])
+  @@index([sessionId, tableId])
+  @@index([documentType])
+  @@index([createdAt])
+  @@map("document_embeddings")
+}
