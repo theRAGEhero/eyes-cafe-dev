@@ -1,0 +1,143 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: eyes_cafe_dev
+      POSTGRES_USER: eyes_cafe
+      POSTGRES_PASSWORD: dev_password
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eyes_cafe -d eyes_cafe_dev"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Redis for caching and queues
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Backend Service
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    ports:
+      - "3002:3002"
+    environment:
+      # Database Configuration
+      DATABASE_URL: "postgresql://eyes_cafe:dev_password@postgres:5432/eyes_cafe_dev"
+      
+      # Redis Configuration
+      REDIS_URL: "redis://redis:6379"
+      
+      # AI APIs
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      DEEPGRAM_API_KEY: ${DEEPGRAM_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      
+      # Server Configuration
+      BACKEND_PORT: 3002
+      FRONTEND_PORT: 3001
+      NODE_ENV: development
+      
+      # World Café Integration
+      WORLD_CAFE_API_URL: http://localhost:3005
+      WORLD_CAFE_DOMAIN: world-cafe.democracyroutes.com
+      
+      # Cross-Platform URLs
+      EYES_CAFE_DOMAIN: eyes-cafe.democracyroutes.com
+      BASE_DOMAIN: democracyroutes.com
+      
+      # Session & Security
+      JWT_SECRET: ${JWT_SECRET:-your-dev-jwt-secret-here}
+      SESSION_SECRET: ${SESSION_SECRET:-your-dev-session-secret-here}
+      
+      # Development Features
+      ENABLE_DEBUG_LOGGING: true
+      ENABLE_API_DOCS: true
+      SKIP_AUTH_IN_DEV: true
+      
+      # Analytics Service
+      PYTHON_ANALYTICS_URL: http://analytics:8001
+      
+      # Report Generation
+      REPORTS_PATH: ./reports
+      CHARTS_PATH: ./charts
+      MAX_REPORT_SIZE_MB: 50
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+      - ./reports:/app/reports
+      - ./charts:/app/charts
+    restart: unless-stopped
+
+  # Frontend Service
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      REACT_APP_BACKEND_URL: http://backend:3002
+      REACT_APP_WORLD_CAFE_DOMAIN: world-cafe.democracyroutes.com
+      REACT_APP_EYES_CAFE_DOMAIN: eyes-cafe.democracyroutes.com
+      NODE_ENV: development
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    restart: unless-stopped
+
+  # Analytics Service (Python)
+  analytics:
+    build:
+      context: .
+      dockerfile: analytics/Dockerfile
+    ports:
+      - "8001:8001"
+    environment:
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      DEEPGRAM_API_KEY: ${DEEPGRAM_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      DATABASE_URL: "postgresql://eyes_cafe:dev_password@postgres:5432/eyes_cafe_dev"
+      REDIS_URL: "redis://redis:6379"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./analytics:/app
+      - ./reports:/app/reports
+      - ./charts:/app/charts
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  default:
+    name: eyes-cafe-network
